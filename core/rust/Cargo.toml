@@ -1,0 +1,10 @@
+[package]
+name = "changegraph-core"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Core graph and impact analysis engine for ChangeGraph"
+repository = "https://github.com/ahr-ahr/ChangeGraph"
+
+[lib]
+path = "src/lib.rs"
