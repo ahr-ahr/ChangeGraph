@@ -9,13 +9,13 @@ pub mod generated {
 
 pub mod mapper;
 
-pub use generated::{Edge, Graph, Node, Observation};
-
-pub use mapper::{
-    GraphMapper,
-    ProtocolEdge,
-    ProtocolGraph,
-    ProtocolNode,
-    ProtocolObservation,
-    ProtocolValue,
+pub use generated::{
+    Edge,
+    Graph,
+    Node,
+    NodeType,
+    Observation,
+    RelationshipType,
 };
+
+pub use mapper::GraphMapper;
