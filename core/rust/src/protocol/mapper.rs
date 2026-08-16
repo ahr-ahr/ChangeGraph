@@ -1,65 +1,23 @@
-//! Mapping between ChangeGraph domain models and protocol representations.
-//!
-//! The generated Protobuf types are intentionally kept out of this module
-//! until the protocol build pipeline is introduced. The intermediate
-//! representations below mirror the stable fields defined by
-//! `specs/graph/graph.proto` and provide a transport-neutral mapping boundary.
+//! Mapping between ChangeGraph domain models and generated Protobuf types.
 
 use std::collections::BTreeMap;
+
+use prost_types::{Struct, Timestamp, Value};
 
 use crate::graph::{
     AttributeValue, Edge, Graph, Node, NodeId, NodeType, Observation, RelationshipType,
 };
 
-/// Protocol-level value representation used by the mapping boundary.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ProtocolValue {
-    Null,
-    Bool(bool),
-    Number(f64),
-    String(String),
-    List(Vec<ProtocolValue>),
-    Object(BTreeMap<String, ProtocolValue>),
-}
+use super::generated::{
+    Edge as ProtoEdge,
+    Graph as ProtoGraph,
+    Node as ProtoNode,
+    NodeType as ProtoNodeType,
+    Observation as ProtoObservation,
+    RelationshipType as ProtoRelationshipType,
+};
 
-/// Protocol-level representation of a graph node.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ProtocolNode {
-    pub id: String,
-    pub node_type: NodeType,
-    pub name: String,
-    pub attributes: BTreeMap<String, ProtocolValue>,
-    pub metadata: BTreeMap<String, ProtocolValue>,
-}
-
-/// Protocol-level representation of an observation.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ProtocolObservation {
-    pub trace_id: Option<String>,
-    pub span_id: Option<String>,
-    pub timestamp_unix_nanos: Option<i64>,
-    pub source_service: Option<String>,
-    pub attributes: BTreeMap<String, ProtocolValue>,
-}
-
-/// Protocol-level representation of a graph edge.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ProtocolEdge {
-    pub source_node_id: String,
-    pub target_node_id: String,
-    pub relationship_type: RelationshipType,
-    pub attributes: BTreeMap<String, ProtocolValue>,
-    pub observations: Vec<ProtocolObservation>,
-}
-
-/// Protocol-level representation of a dependency graph.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ProtocolGraph {
-    pub nodes: Vec<ProtocolNode>,
-    pub edges: Vec<ProtocolEdge>,
-}
-
-/// Maps domain graph values into the protocol boundary.
+/// Maps ChangeGraph domain models into generated Protobuf representations.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct GraphMapper;
 
@@ -69,32 +27,33 @@ impl GraphMapper {
         Self
     }
 
-    /// Maps a domain graph into its protocol representation.
-    pub fn map_graph(&self, graph: &Graph) -> ProtocolGraph {
-        ProtocolGraph {
+    /// Maps a domain graph into a Protobuf graph.
+    pub fn map_graph(&self, graph: &Graph) -> ProtoGraph {
+        ProtoGraph {
             nodes: graph.nodes().map(Self::map_node).collect(),
             edges: graph.edges().map(Self::map_edge).collect(),
+            metadata: None,
         }
     }
 
-    /// Maps a domain node into its protocol representation.
-    pub fn map_node(node: &Node) -> ProtocolNode {
-        ProtocolNode {
+    /// Maps a domain node into a Protobuf node.
+    pub fn map_node(node: &Node) -> ProtoNode {
+        ProtoNode {
             id: node.id.clone(),
-            node_type: node.node_type,
+            r#type: node_type_to_proto(node.node_type),
             name: node.name.clone(),
-            attributes: map_attributes(&node.attributes),
-            metadata: map_attributes(&node.metadata),
+            attributes: map_struct(&node.attributes),
+            metadata: map_struct(&node.metadata),
         }
     }
 
-    /// Maps a domain edge into its protocol representation.
-    pub fn map_edge(edge: &Edge) -> ProtocolEdge {
-        ProtocolEdge {
+    /// Maps a domain edge into a Protobuf edge.
+    pub fn map_edge(edge: &Edge) -> ProtoEdge {
+        ProtoEdge {
             source_node_id: edge.source_node_id.clone(),
             target_node_id: edge.target_node_id.clone(),
-            relationship_type: edge.relationship_type,
-            attributes: map_attributes(&edge.attributes),
+            relationship_type: relationship_type_to_proto(edge.relationship_type),
+            attributes: map_struct(&edge.attributes),
             observations: edge
                 .observations
                 .iter()
@@ -103,14 +62,16 @@ impl GraphMapper {
         }
     }
 
-    /// Maps a domain observation into its protocol representation.
-    pub fn map_observation(observation: &Observation) -> ProtocolObservation {
-        ProtocolObservation {
-            trace_id: observation.trace_id.clone(),
-            span_id: observation.span_id.clone(),
-            timestamp_unix_nanos: observation.timestamp_unix_nanos,
-            source_service: observation.source_service.clone(),
-            attributes: map_attributes(&observation.attributes),
+    /// Maps a domain observation into a Protobuf observation.
+    pub fn map_observation(observation: &Observation) -> ProtoObservation {
+        ProtoObservation {
+            trace_id: observation.trace_id.clone().unwrap_or_default(),
+            span_id: observation.span_id.clone().unwrap_or_default(),
+            timestamp: observation
+                .timestamp_unix_nanos
+                .map(timestamp_from_unix_nanos),
+            source_service: observation.source_service.clone().unwrap_or_default(),
+            attributes: map_struct(&observation.attributes),
         }
     }
 
@@ -120,29 +81,84 @@ impl GraphMapper {
     }
 }
 
-fn map_attributes(
-    attributes: &BTreeMap<String, AttributeValue>,
-) -> BTreeMap<String, ProtocolValue> {
-    attributes
-        .iter()
-        .map(|(key, value)| (key.clone(), map_value(value)))
-        .collect()
+fn node_type_to_proto(node_type: NodeType) -> i32 {
+    match node_type {
+        NodeType::Service => ProtoNodeType::Service as i32,
+        NodeType::Endpoint => ProtoNodeType::Endpoint as i32,
+        NodeType::Database => ProtoNodeType::Database as i32,
+        NodeType::DatabaseTable => ProtoNodeType::DatabaseTable as i32,
+        NodeType::Queue => ProtoNodeType::Queue as i32,
+        NodeType::Topic => ProtoNodeType::Topic as i32,
+        NodeType::Event => ProtoNodeType::Event as i32,
+        NodeType::ExternalService => ProtoNodeType::ExternalService as i32,
+        NodeType::Resource => ProtoNodeType::Resource as i32,
+    }
 }
 
-fn map_value(value: &AttributeValue) -> ProtocolValue {
-    match value {
-        AttributeValue::Null => ProtocolValue::Null,
-        AttributeValue::Bool(value) => ProtocolValue::Bool(*value),
-        AttributeValue::Number(value) => ProtocolValue::Number(*value),
-        AttributeValue::String(value) => ProtocolValue::String(value.clone()),
-        AttributeValue::List(values) => {
-            ProtocolValue::List(values.iter().map(map_value).collect())
-        }
-        AttributeValue::Object(values) => ProtocolValue::Object(
-            values
-                .iter()
-                .map(|(key, value)| (key.clone(), map_value(value)))
-                .collect(),
-        ),
+fn relationship_type_to_proto(relationship_type: RelationshipType) -> i32 {
+    match relationship_type {
+        RelationshipType::Calls => ProtoRelationshipType::Calls as i32,
+        RelationshipType::Reads => ProtoRelationshipType::Reads as i32,
+        RelationshipType::Writes => ProtoRelationshipType::Writes as i32,
+        RelationshipType::Publishes => ProtoRelationshipType::Publishes as i32,
+        RelationshipType::Consumes => ProtoRelationshipType::Consumes as i32,
+        RelationshipType::DependsOn => ProtoRelationshipType::DependsOn as i32,
     }
+}
+
+fn map_struct(attributes: &BTreeMap<String, AttributeValue>) -> Option<Struct> {
+    if attributes.is_empty() {
+        return None;
+    }
+
+    Some(Struct {
+        fields: attributes
+            .iter()
+            .map(|(key, value)| (key.clone(), map_value(value)))
+            .collect(),
+    })
+}
+
+fn map_value(value: &AttributeValue) -> Value {
+    match value {
+        AttributeValue::Null => Value {
+            kind: Some(prost_types::value::Kind::NullValue(0)),
+        },
+
+        AttributeValue::Bool(value) => Value {
+            kind: Some(prost_types::value::Kind::BoolValue(*value)),
+        },
+
+        AttributeValue::Number(value) => Value {
+            kind: Some(prost_types::value::Kind::NumberValue(*value)),
+        },
+
+        AttributeValue::String(value) => Value {
+            kind: Some(prost_types::value::Kind::StringValue(value.clone())),
+        },
+
+        AttributeValue::List(values) => Value {
+            kind: Some(prost_types::value::Kind::ListValue(
+                prost_types::ListValue {
+                    values: values.iter().map(map_value).collect(),
+                },
+            )),
+        },
+
+        AttributeValue::Object(values) => Value {
+            kind: Some(prost_types::value::Kind::StructValue(Struct {
+                fields: values
+                    .iter()
+                    .map(|(key, value)| (key.clone(), map_value(value)))
+                    .collect(),
+            })),
+        },
+    }
+}
+
+fn timestamp_from_unix_nanos(unix_nanos: i64) -> Timestamp {
+    let seconds = unix_nanos.div_euclid(1_000_000_000);
+    let nanos = unix_nanos.rem_euclid(1_000_000_000) as i32;
+
+    Timestamp { seconds, nanos }
 }
