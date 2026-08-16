@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package changegraph.graph.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "io.changegraph.graph.v1";
+
+// Describes the category of a graph node.
+enum NodeType {
+  NODE_TYPE_UNSPECIFIED = 0;
+
+  NODE_TYPE_SERVICE = 1;
+  NODE_TYPE_ENDPOINT = 2;
+  NODE_TYPE_DATABASE = 3;
+  NODE_TYPE_DATABASE_TABLE = 4;
+  NODE_TYPE_QUEUE = 5;
+  NODE_TYPE_TOPIC = 6;
+  NODE_TYPE_EVENT = 7;
+  NODE_TYPE_EXTERNAL_SERVICE = 8;
+  NODE_TYPE_RESOURCE = 9;
+}
+
+// Describes the directed relationship between two nodes.
+enum RelationshipType {
+  RELATIONSHIP_TYPE_UNSPECIFIED = 0;
+
+  RELATIONSHIP_TYPE_CALLS = 1;
+  RELATIONSHIP_TYPE_READS = 2;
+  RELATIONSHIP_TYPE_WRITES = 3;
+  RELATIONSHIP_TYPE_PUBLISHES = 4;
+  RELATIONSHIP_TYPE_CONSUMES = 5;
+  RELATIONSHIP_TYPE_DEPENDS_ON = 6;
+}
+
+// Identifies a graph node.
+message Node {
+  // Stable identity of the node.
+  string id = 1;
+
+  // Category of the node.
+  NodeType type = 2;
+
+  // Human-readable name.
+  string name = 3;
+
+  // Additional descriptive attributes.
+  google.protobuf.Struct attributes = 4;
+
+  // Additional metadata associated with the node.
+  google.protobuf.Struct metadata = 5;
+}
+
+// Identifies one observation that contributed evidence to an edge.
+message Observation {
+  // OpenTelemetry trace identifier, when available.
+  string trace_id = 1;
+
+  // OpenTelemetry span identifier, when available.
+  string span_id = 2;
+
+  // Time at which the observation occurred.
+  google.protobuf.Timestamp timestamp = 3;
+
+  // Service that produced the observation, when available.
+  string source_service = 4;
+
+  // Runtime or telemetry attributes associated with the observation.
+  google.protobuf.Struct attributes = 5;
+}
+
+// Represents a directed relationship between two nodes.
+message Edge {
+  // Stable identifier of the source node.
+  string source_node_id = 1;
+
+  // Stable identifier of the target node.
+  string target_node_id = 2;
+
+  // Type of relationship between source and target.
+  RelationshipType relationship_type = 3;
+
+  // Additional relationship attributes.
+  google.protobuf.Struct attributes = 4;
+
+  // Evidence that contributed to this logical relationship.
+  repeated Observation observations = 5;
+}
+
+// Represents a dependency graph.
+message Graph {
+  // Nodes contained in the graph.
+  repeated Node nodes = 1;
+
+  // Directed relationships between nodes.
+  repeated Edge edges = 2;
+
+  // Optional graph-level metadata.
+  google.protobuf.Struct metadata = 3;
+}
