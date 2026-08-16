@@ -5,3 +5,4 @@
 //! mapping are implemented in dedicated modules as the project evolves.
 
 pub mod graph;
+pub mod ingest;
