@@ -162,3 +162,207 @@ fn timestamp_from_unix_nanos(unix_nanos: i64) -> Timestamp {
 
     Timestamp { seconds, nanos }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_node_type_to_proto() {
+        assert_eq!(
+            node_type_to_proto(NodeType::Service),
+            ProtoNodeType::Service as i32
+        );
+        assert_eq!(
+            node_type_to_proto(NodeType::Endpoint),
+            ProtoNodeType::Endpoint as i32
+        );
+        assert_eq!(
+            node_type_to_proto(NodeType::Database),
+            ProtoNodeType::Database as i32
+        );
+        assert_eq!(
+            node_type_to_proto(NodeType::DatabaseTable),
+            ProtoNodeType::DatabaseTable as i32
+        );
+        assert_eq!(
+            node_type_to_proto(NodeType::Queue),
+            ProtoNodeType::Queue as i32
+        );
+        assert_eq!(
+            node_type_to_proto(NodeType::Topic),
+            ProtoNodeType::Topic as i32
+        );
+        assert_eq!(
+            node_type_to_proto(NodeType::Event),
+            ProtoNodeType::Event as i32
+        );
+        assert_eq!(
+            node_type_to_proto(NodeType::ExternalService),
+            ProtoNodeType::ExternalService as i32
+        );
+        assert_eq!(
+            node_type_to_proto(NodeType::Resource),
+            ProtoNodeType::Resource as i32
+        );
+    }
+
+    #[test]
+    fn maps_relationship_type_to_proto() {
+        assert_eq!(
+            relationship_type_to_proto(RelationshipType::Calls),
+            ProtoRelationshipType::Calls as i32
+        );
+        assert_eq!(
+            relationship_type_to_proto(RelationshipType::Reads),
+            ProtoRelationshipType::Reads as i32
+        );
+        assert_eq!(
+            relationship_type_to_proto(RelationshipType::Writes),
+            ProtoRelationshipType::Writes as i32
+        );
+        assert_eq!(
+            relationship_type_to_proto(RelationshipType::Publishes),
+            ProtoRelationshipType::Publishes as i32
+        );
+        assert_eq!(
+            relationship_type_to_proto(RelationshipType::Consumes),
+            ProtoRelationshipType::Consumes as i32
+        );
+        assert_eq!(
+            relationship_type_to_proto(RelationshipType::DependsOn),
+            ProtoRelationshipType::DependsOn as i32
+        );
+    }
+
+    #[test]
+    fn maps_empty_attributes_to_none() {
+        let attributes = BTreeMap::new();
+
+        assert_eq!(map_struct(&attributes), None);
+    }
+
+    #[test]
+    fn maps_scalar_attributes_to_protobuf_values() {
+        let mut attributes = BTreeMap::new();
+
+        attributes.insert("null".to_owned(), AttributeValue::Null);
+        attributes.insert("bool".to_owned(), AttributeValue::Bool(true));
+        attributes.insert("number".to_owned(), AttributeValue::Number(42.5));
+        attributes.insert(
+            "string".to_owned(),
+            AttributeValue::String("changegraph".to_owned()),
+        );
+
+        let structure = map_struct(&attributes).expect("struct should exist");
+
+        assert_eq!(
+            structure
+                .fields
+                .get("null")
+                .and_then(|value| value.kind.as_ref()),
+            Some(&prost_types::value::Kind::NullValue(0))
+        );
+
+        assert_eq!(
+            structure
+                .fields
+                .get("bool")
+                .and_then(|value| value.kind.as_ref()),
+            Some(&prost_types::value::Kind::BoolValue(true))
+        );
+
+        assert_eq!(
+            structure
+                .fields
+                .get("number")
+                .and_then(|value| value.kind.as_ref()),
+            Some(&prost_types::value::Kind::NumberValue(42.5))
+        );
+
+        assert_eq!(
+            structure
+                .fields
+                .get("string")
+                .and_then(|value| value.kind.as_ref()),
+            Some(&prost_types::value::Kind::StringValue(
+                "changegraph".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn maps_list_attribute_to_protobuf_list() {
+        let values = vec![
+            AttributeValue::String("one".to_owned()),
+            AttributeValue::Number(2.0),
+            AttributeValue::Bool(true),
+        ];
+
+        let value = map_value(&AttributeValue::List(values));
+
+        match value.kind {
+            Some(prost_types::value::Kind::ListValue(list)) => {
+                assert_eq!(list.values.len(), 3);
+            }
+            _ => panic!("expected protobuf list value"),
+        }
+    }
+
+    #[test]
+    fn maps_object_attribute_to_protobuf_struct() {
+        let mut object = BTreeMap::new();
+
+        object.insert(
+            "service".to_owned(),
+            AttributeValue::String("order-service".to_owned()),
+        );
+
+        object.insert(
+            "version".to_owned(),
+            AttributeValue::Number(1.0),
+        );
+
+        let value = map_value(&AttributeValue::Object(object));
+
+        match value.kind {
+            Some(prost_types::value::Kind::StructValue(structure)) => {
+                assert_eq!(structure.fields.len(), 2);
+                assert!(structure.fields.contains_key("service"));
+                assert!(structure.fields.contains_key("version"));
+            }
+            _ => panic!("expected protobuf struct value"),
+        }
+    }
+
+    #[test]
+    fn maps_positive_unix_nanoseconds_to_timestamp() {
+        let timestamp = timestamp_from_unix_nanos(1_500_000_000);
+
+        assert_eq!(timestamp.seconds, 1);
+        assert_eq!(timestamp.nanos, 500_000_000);
+    }
+
+    #[test]
+    fn maps_negative_unix_nanoseconds_to_timestamp() {
+        let timestamp = timestamp_from_unix_nanos(-500_000_000);
+
+        assert_eq!(timestamp.seconds, -1);
+        assert_eq!(timestamp.nanos, 500_000_000);
+    }
+
+    #[test]
+    fn maps_zero_unix_nanoseconds_to_timestamp() {
+        let timestamp = timestamp_from_unix_nanos(0);
+
+        assert_eq!(timestamp.seconds, 0);
+        assert_eq!(timestamp.nanos, 0);
+    }
+
+    #[test]
+    fn preserves_node_id() {
+        let node_id = "service:order".to_owned();
+
+        assert_eq!(GraphMapper::map_node_id(&node_id), node_id);
+    }
+}
