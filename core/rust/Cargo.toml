@@ -8,3 +8,6 @@ repository = "https://github.com/ahr-ahr/ChangeGraph"
 
 [lib]
 path = "src/lib.rs"
+
+[build-dependencies]
+prost-build = "0.14"
