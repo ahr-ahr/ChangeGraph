@@ -1,0 +1,69 @@
+# Rust
+/target/
+**/target/
+Cargo.lock
+
+# Rust tooling
+*.rs.bk
+
+# IDEs and editors
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Node.js SDK / examples
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# PHP SDK / examples
+/vendor/
+
+# Python SDK / examples
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Build and generated artifacts
+/dist/
+/build/
+/generated/
+
+# Local test / development data
+.tmp/
+.temp/
+.cache/
+coverage/
+htmlcov/
+
+# ChangeGraph local artifacts
+*.cgstate
+*.statepack
+
+# Protobuf generated artifacts
+*.pb
+*.pb.bin
