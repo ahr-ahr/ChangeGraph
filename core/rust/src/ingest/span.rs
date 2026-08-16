@@ -106,3 +106,106 @@ impl Span {
             .saturating_sub(self.start_time_unix_nanos)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn creates_span_with_expected_fields() {
+        let span = Span::new(
+            "trace-1",
+            "span-1",
+            "http.request",
+            SpanKind::Server,
+            1_000,
+            3_000,
+        );
+
+        assert_eq!(span.trace_id, "trace-1");
+        assert_eq!(span.span_id, "span-1");
+        assert_eq!(span.parent_span_id, None);
+        assert_eq!(span.name, "http.request");
+        assert_eq!(span.kind, SpanKind::Server);
+        assert_eq!(span.start_time_unix_nanos, 1_000);
+        assert_eq!(span.end_time_unix_nanos, 3_000);
+        assert!(span.attributes.is_empty());
+    }
+
+    #[test]
+    fn sets_parent_span_id() {
+        let span = Span::new(
+            "trace-1",
+            "span-2",
+            "db.query",
+            SpanKind::Client,
+            1_000,
+            2_000,
+        )
+        .with_parent_span_id("span-1");
+
+        assert_eq!(span.parent_span_id.as_deref(), Some("span-1"));
+    }
+
+    #[test]
+    fn adds_and_replaces_attributes() {
+        let span = Span::new(
+            "trace-1",
+            "span-1",
+            "http.request",
+            SpanKind::Server,
+            1_000,
+            2_000,
+        )
+        .with_attribute("service.name", "order-service")
+        .with_attribute("http.method", "GET")
+        .with_attribute("http.method", "POST");
+
+        assert_eq!(
+            span.attributes.get("service.name").map(String::as_str),
+            Some("order-service")
+        );
+
+        assert_eq!(
+            span.attributes.get("http.method").map(String::as_str),
+            Some("POST")
+        );
+    }
+
+    #[test]
+    fn calculates_duration_in_nanoseconds() {
+        let span = Span::new(
+            "trace-1",
+            "span-1",
+            "http.request",
+            SpanKind::Server,
+            1_000,
+            4_500,
+        );
+
+        assert_eq!(span.duration_nanos(), 3_500);
+    }
+
+    #[test]
+    fn preserves_negative_duration_when_end_precedes_start() {
+        let span = Span::new(
+            "trace-1",
+            "span-1",
+            "invalid",
+            SpanKind::Internal,
+            5_000,
+            1_000,
+        );
+
+        assert_eq!(span.duration_nanos(), -4_000);
+    }
+
+    #[test]
+    fn returns_canonical_span_kind_names() {
+        assert_eq!(SpanKind::Internal.as_str(), "internal");
+        assert_eq!(SpanKind::Server.as_str(), "server");
+        assert_eq!(SpanKind::Client.as_str(), "client");
+        assert_eq!(SpanKind::Producer.as_str(), "producer");
+        assert_eq!(SpanKind::Consumer.as_str(), "consumer");
+    }
+}
